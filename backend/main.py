@@ -23,7 +23,7 @@ origins = [
     "https://localhost:8080",
     "http://localhost:3000",
     "https://localhost:3000",
-    # Vercel部署后会自动添加实际域名
+    "https://aquant.vercel.app",  # Vercel前端域名
 ]
 # 从环境变量读取额外允许的域名
 additional_origins = os.getenv("ALLOWED_ORIGINS", "")
