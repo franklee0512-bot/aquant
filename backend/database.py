@@ -16,7 +16,7 @@ DATABASE_URL = os.getenv(
 
 engine = create_engine(
     DATABASE_URL,
-    poolclass=NullPool,
+    pool_pre_ping=True,
     connect_args={'connect_timeout': 30}
 )
 
