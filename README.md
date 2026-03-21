@@ -143,3 +143,4 @@ curl -X POST http://localhost:8000/api/run-daily-sync
 ## 免责声明
 
 本工具仅供学习和研究使用，不构成任何投资建议。股市有风险，投资需谨慎。
+# Railway deployment trigger
