@@ -14,8 +14,11 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:fJ4LbIXtyIZkRsKZ@db.osviannkljvoblhxwsut.supabase.co:5432/postgres"
 )
 
+# 移除 SQLAlchemy 不支持的查询参数（如 pgbouncer=true）
+clean_url = DATABASE_URL.split('?')[0] if '?' in DATABASE_URL else DATABASE_URL
+
 engine = create_engine(
-    DATABASE_URL,
+    clean_url,
     pool_pre_ping=True,
     connect_args={'connect_timeout': 30}
 )
