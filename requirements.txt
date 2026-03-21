@@ -1,0 +1,13 @@
+# 后端依赖
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+pandas==2.1.4
+numpy==1.26.3
+requests==2.31.0
+python-multipart==0.0.6
+
+# 数据同步依赖
+akshare==1.13.33
+apscheduler==3.10.4
