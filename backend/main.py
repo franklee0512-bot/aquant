@@ -11,6 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import database as db
 import os
 import sys
+import pandas as pd
 
 # 添加数据同步模块路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'data_sync'))
@@ -483,9 +484,6 @@ def get_stock_detail(code: str):
         "recent_signals": signals_df.to_dict('records') if not signals_df.empty else []
     }
 
-
-# 导入pandas
-import pandas as pd
 
 if __name__ == "__main__":
     import uvicorn
