@@ -235,7 +235,7 @@ def get_assets_chart(days: int = 90):
     SELECT date, total_assets, cash, stock_value, daily_pnl,
            cumulative_pnl, hs300_close, hs300_return
     FROM asset_history
-    WHERE date >= CURRENT_DATE - INTERVAL ':days days'
+    WHERE date >= CURRENT_DATE - (:days * INTERVAL '1 day')
     ORDER BY date ASC
     """
     df = db.query(sql, {'days': days})

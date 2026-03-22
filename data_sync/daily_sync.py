@@ -7,6 +7,10 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 强制绕过系统代理，直连访问东方财富等数据源
+os.environ['NO_PROXY'] = '*'
+os.environ['no_proxy'] = '*'
+
 from datetime import datetime
 from database import db
 from data_fetcher import DataFetcher
@@ -47,15 +51,12 @@ def run_daily_sync():
 
         stock_codes = filtered_stocks['code'].tolist()
 
-        # 3. 拉取日线数据（近1年）
+        # 3. 拉取日线数据（近60天，每日增量）
         print("\n【步骤2】拉取日线数据...")
-        daily_count = fetcher.fetch_all_daily_data(stock_codes, days=365)
+        daily_count = fetcher.fetch_all_daily_data(stock_codes, days=60)
         print(f"  日线数据更新完成: {daily_count} 条记录")
 
-        # 4. 拉取财务数据
-        print("\n【步骤3】拉取财务数据...")
-        finance_count = fetcher.fetch_all_finance_data(stock_codes)
-        print(f"  财务数据更新完成: {finance_count} 条记录")
+        # 财务数据由 finance_sync.py 每周单独跑，此处跳过
 
         # 5. 数据质量验证
         print("\n【步骤4】数据质量验证...")
@@ -72,18 +73,16 @@ def run_daily_sync():
         print("任务执行成功！")
         print(f"  - 股票池: {count} 只")
         print(f"  - 日线数据: {daily_count} 条")
-        print(f"  - 财务数据: {finance_count} 条")
         print(f"  - 生成信号: {signal_results['total']} 个")
         print(f"{'='*70}\n")
 
         db.log_task(
             '每日数据同步',
             'success',
-            f'任务完成: {count}只股票, {daily_count}条日线, {signal_results["total"]}个信号',
+            f'任务完成: {count}只股票, {daily_count}条日线, {signal_results["total"]}个信号（财务数据请单独运行finance_sync.py）',
             {
                 'stock_count': count,
                 'daily_count': daily_count,
-                'finance_count': finance_count,
                 'signals': signal_results
             }
         )
@@ -92,7 +91,7 @@ def run_daily_sync():
 
     except Exception as e:
         error_msg = f"任务执行失败: {str(e)}"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[失败] {error_msg}")
 
         db.log_task('每日数据同步', 'failed', error_msg)
         return False

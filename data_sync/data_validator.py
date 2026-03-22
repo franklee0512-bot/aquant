@@ -96,7 +96,7 @@ class DataValidator:
         print(f"  高缺失股票数(>20%): {len(high_missing_stocks)}")
 
         if high_missing_stocks:
-            print(f"\n⚠️  ROE数据缺失率>20%的股票:")
+            print(f"\n[!]  ROE数据缺失率>20%的股票:")
             for stock in high_missing_stocks[:10]:  # 只显示前10个
                 print(f"    {stock['code']} {stock['name']}: {stock['missing_rate']}")
 
@@ -112,7 +112,7 @@ class DataValidator:
                 }
             )
         else:
-            print(f"\n✅ 所有抽查股票ROE数据质量良好")
+            print(f"\n[OK] 所有抽查股票ROE数据质量良好")
             self.db.log_task(
                 '数据质量验证',
                 'success',
@@ -145,7 +145,7 @@ class DataValidator:
 
         if recent_data.empty:
             message = "最近7天无日线数据"
-            print(f"⚠️  {message}")
+            print(f"[!]  {message}")
             self.db.log_task('日线数据验证', 'warning', message)
             return {'status': 'warning', 'message': message}
 
@@ -162,11 +162,11 @@ class DataValidator:
 
         if codes_with_data < all_codes * 0.9:
             message = f"日线数据覆盖率低: {codes_with_data}/{all_codes}"
-            print(f"⚠️  {message}")
+            print(f"[!]  {message}")
             self.db.log_task('日线数据验证', 'warning', message)
             return {'status': 'warning', 'message': message}
 
-        print(f"✅ 日线数据完整性良好")
+        print(f"[OK] 日线数据完整性良好")
         self.db.log_task('日线数据验证', 'success',
                         f'数据完整，{codes_with_data}只股票有近期数据')
 
@@ -192,7 +192,7 @@ class DataValidator:
 
         if not result or result.get('total_records', 0) == 0:
             message = "近1年无财务数据"
-            print(f"⚠️  {message}")
+            print(f"[!]  {message}")
             self.db.log_task('财务数据验证', 'warning', message)
             return {'status': 'warning', 'message': message}
 
@@ -214,11 +214,11 @@ class DataValidator:
 
         if low_completeness:
             message = f"以下字段完整率低于80%: {', '.join(low_completeness)}"
-            print(f"⚠️  {message}")
+            print(f"[!]  {message}")
             self.db.log_task('财务数据验证', 'warning', message, completeness)
             return {'status': 'warning', 'message': message, 'completeness': completeness}
 
-        print(f"✅ 财务数据完整性良好")
+        print(f"[OK] 财务数据完整性良好")
         self.db.log_task('财务数据验证', 'success',
                         f'数据完整，共{total}条记录', completeness)
 

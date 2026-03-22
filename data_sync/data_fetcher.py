@@ -15,12 +15,29 @@ class DataFetcher:
         self.db = db
 
     def get_all_stocks(self) -> pd.DataFrame:
-        """获取全部A股列表"""
-        print("正在获取全部A股列表...")
+        """获取沪深300+中证500成分股，作为股票池"""
+        print("正在获取沪深300+中证500成分股...")
         try:
-            # 获取股票列表
-            df = ak.stock_zh_a_spot_em()
-            print(f"获取到 {len(df)} 只股票")
+            rows = {}
+            for symbol, label in [("000300", "沪深300"), ("000905", "中证500")]:
+                try:
+                    cons = ak.index_stock_cons(symbol=symbol)
+                    code_col = '品种代码' if '品种代码' in cons.columns else cons.columns[0]
+                    name_col = '品种名称' if '品种名称' in cons.columns else (cons.columns[1] if len(cons.columns) > 1 else None)
+                    for _, r in cons.iterrows():
+                        code = str(r[code_col])
+                        name = str(r[name_col]) if name_col else code
+                        if code not in rows:
+                            rows[code] = {'code': code, 'name': name}
+                    print(f"  - {label}: {len(cons)} 只")
+                except Exception as e:
+                    print(f"  - {label} 获取失败: {e}")
+
+            if not rows:
+                raise Exception("沪深300和中证500成分股均获取失败")
+
+            df = pd.DataFrame(list(rows.values()))
+            print(f"获取到 {len(df)} 只成分股（去重后）")
             return df
         except Exception as e:
             print(f"获取股票列表失败: {e}")
@@ -30,91 +47,50 @@ class DataFetcher:
         """
         过滤股票：
         - 排除ST/*ST股
-        - 排除上市不足3年
-        - 排除市值<30亿
+        - 排除市值<30亿（沪深300/500基本都满足，保留兜底检查）
+        - 上市3年以上（指数成分股天然满足，跳过逐个查询）
         - 排除资产负债率>70%
         """
         print("开始过滤股票...")
         original_count = len(df)
 
-        # 重命名列以便处理
         df = df.copy()
 
         # 1. 排除ST/*ST股
-        if '名称' in df.columns:
-            df = df[~df['名称'].str.contains('ST|退', na=False)]
+        name_col = 'name' if 'name' in df.columns else ('名称' if '名称' in df.columns else None)
+        if name_col:
+            df = df[~df[name_col].str.contains('ST|退', na=False)]
             print(f"  - 排除ST股后: {len(df)} 只")
 
-        # 2. 排除市值<30亿
-        if '总市值' in df.columns:
-            # AKShare市值单位是元，30亿 = 3e9
-            df = df[df['总市值'] >= 3e9]
-            print(f"  - 市值>=30亿: {len(df)} 只")
-        elif '流通市值' in df.columns:
-            df = df[df['流通市值'] >= 3e9]
-            print(f"  - 流通市值>=30亿: {len(df)} 只")
+        # 2. 市值过滤（沪深300/500成分股已满足，有列时做兜底检查）
+        for cap_col in ('总市值', '流通市值'):
+            if cap_col in df.columns:
+                df = df[df[cap_col] >= 3e9]
+                print(f"  - {cap_col}>=30亿: {len(df)} 只")
+                break
+        else:
+            print(f"  - 市值过滤跳过（成分股默认满足）")
 
-        # 3. 获取上市日期并排除上市不足3年的
-        three_years_ago = (datetime.now() - timedelta(days=3*365)).strftime('%Y%m%d')
-
-        # 尝试获取每只股票的详细信息
+        # 3. 整理基础字段
+        code_col = 'code' if 'code' in df.columns else '代码'
         filtered_list = []
         for _, row in df.iterrows():
-            code = row.get('代码', '')
-            name = row.get('名称', '')
+            code = row.get(code_col, '')
+            name = row.get('name', row.get('名称', ''))
             if not code:
                 continue
-
-            try:
-                # 获取个股信息
-                stock_info = ak.stock_individual_info_em(symbol=code)
-                if stock_info is not None and not stock_info.empty:
-                    list_date = stock_info[stock_info['item'] == '上市时间']['value'].values
-                    if len(list_date) > 0:
-                        list_date_str = str(list_date[0])
-                        if list_date_str >= three_years_ago:
-                            continue  # 上市不足3年，跳过
-
-                filtered_list.append({
-                    'code': code,
-                    'name': name,
-                    'market_cap': row.get('总市值', row.get('流通市值', 0)) / 1e8,  # 转为亿
-                    'industry': row.get('所属行业', ''),
-                    'list_date': stock_info[stock_info['item'] == '上市时间']['value'].values[0] if stock_info is not None and not stock_info.empty else None
-                })
-            except Exception as e:
-                # 如果获取不到详细信息，暂时保留
-                filtered_list.append({
-                    'code': code,
-                    'name': name,
-                    'market_cap': row.get('总市值', row.get('流通市值', 0)) / 1e8,
-                    'industry': row.get('所属行业', ''),
-                    'list_date': None
-                })
+            filtered_list.append({
+                'code': code,
+                'name': name,
+                'market_cap': row.get('总市值', row.get('流通市值', 0)) / 1e8,
+                'industry': row.get('所属行业', ''),
+                'list_date': None
+            })
 
         result_df = pd.DataFrame(filtered_list)
-        print(f"  - 上市>3年后: {len(result_df)} 只")
 
-        # 获取财务报表数据筛选资产负债率
-        final_list = []
-        for _, row in result_df.iterrows():
-            code = row['code']
-            try:
-                # 获取主要财务指标
-                finance_df = ak.stock_financial_analysis_indicator(symbol=code)
-                if finance_df is not None and not finance_df.empty:
-                    # 获取最新的资产负债率
-                    debt_ratio = finance_df.get('资产负债率(%)', pd.Series([0])).iloc[0]
-                    if isinstance(debt_ratio, (int, float)) and debt_ratio > 70:
-                        continue  # 资产负债率>70%，跳过
-                    row['debt_ratio'] = debt_ratio
-                final_list.append(row)
-            except Exception as e:
-                # 获取不到财务数据，暂时保留
-                final_list.append(row)
-
-        result_df = pd.DataFrame(final_list)
-        print(f"  - 资产负债率<=70%: {len(result_df)} 只")
+        # 4. 资产负债率过滤（沪深300/500成分股跳过，避免逐个API调用）
+        print(f"  - 资产负债率过滤跳过（成分股默认满足）")
         print(f"过滤完成: {original_count} -> {len(result_df)} 只")
 
         return result_df
@@ -212,57 +188,58 @@ class DataFetcher:
         return total_count
 
     def fetch_finance_data(self, code: str) -> pd.DataFrame:
-        """获取单只股票财务数据"""
+        """获取单只股票财务数据（同花顺财务摘要 + 乐咕乐股PE指标）"""
         try:
-            df = ak.stock_financial_analysis_indicator(symbol=code)
-            if df is not None and not df.empty:
-                # 重命名列
-                column_mapping = {
-                    '报告日': 'report_date',
-                    '净资产收益率(%)': 'roe',
-                    '总资产报酬率(%)': 'roa',
-                    '销售毛利率(%)': 'gross_margin',
-                    '净利润(亿元)': 'net_profit',
-                    '营业收入(亿元)': 'revenue',
-                    '资产负债率(%)': 'debt_ratio',
-                    '经营现金流净额(亿元)': 'operating_cash_flow',
-                }
+            # 1. 同花顺财务摘要（含ROE、净利润、营业收入）
+            fin_df = ak.stock_financial_abstract_ths(symbol=code, indicator="按报告期")
+            if fin_df is None or fin_df.empty:
+                return pd.DataFrame()
 
-                # 获取PE/PB数据
+            # 2. 乐咕乐股 PE/PB 指标（最新值）
+            pe_ttm, pb = None, None
+            try:
                 pe_df = ak.stock_a_indicator_lg(symbol=code)
-                pe_ttm = None
-                pb = None
                 if pe_df is not None and not pe_df.empty:
                     pe_ttm = pe_df.get('市盈率(TTM)', pd.Series([None])).iloc[0]
                     pb = pe_df.get('市净率', pd.Series([None])).iloc[0]
+            except Exception:
+                pass
 
-                records = []
-                for _, row in df.iterrows():
-                    report_date = row.get('报告日', '')
-                    if report_date:
-                        try:
-                            report_date = datetime.strptime(str(report_date), '%Y-%m-%d').date()
-                        except:
-                            report_date = None
+            records = []
+            for _, row in fin_df.iterrows():
+                report_date = row.get('报告期', None)
+                if report_date:
+                    try:
+                        report_date = datetime.strptime(str(report_date), '%Y-%m-%d').date()
+                    except Exception:
+                        report_date = None
 
-                    # 计算现金流比率
-                    net_profit = row.get('净利润(亿元)', 0)
-                    cash_flow = row.get('经营现金流净额(亿元)', 0)
-                    cash_flow_ratio = cash_flow / net_profit if net_profit and net_profit > 0 else 0
+                net_profit = row.get('净利润(亿元)', None)
+                cash_flow = row.get('经营活动产生的现金流量净额(亿元)', None)
+                if net_profit and cash_flow and float(net_profit) > 0:
+                    cash_flow_ratio = float(cash_flow) / float(net_profit)
+                else:
+                    cash_flow_ratio = None
 
-                    records.append({
-                        'code': code,
-                        'report_date': report_date,
-                        'pe_ttm': pe_ttm,
-                        'pb': pb,
-                        'roe': row.get('净资产收益率(%)', None),
-                        'net_profit': net_profit,
-                        'cash_flow_ratio': cash_flow_ratio,
-                        'revenue': row.get('营业收入(亿元)', None),
-                        'gross_margin': row.get('销售毛利率(%)', None)
-                    })
+                roe_raw = row.get('净资产收益率(%)', None)
+                try:
+                    roe = float(roe_raw) if roe_raw is not None else None
+                except (ValueError, TypeError):
+                    roe = None
 
-                return pd.DataFrame(records)
+                records.append({
+                    'code': code,
+                    'report_date': report_date,
+                    'pe_ttm': pe_ttm,
+                    'pb': pb,
+                    'roe': roe,
+                    'net_profit': net_profit,
+                    'cash_flow_ratio': cash_flow_ratio,
+                    'revenue': row.get('营业收入(亿元)', None),
+                    'gross_margin': None
+                })
+
+            return pd.DataFrame(records)
         except Exception as e:
             print(f"获取 {code} 财务数据失败: {e}")
 

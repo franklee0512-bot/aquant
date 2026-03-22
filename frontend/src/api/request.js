@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // 根据环境切换API地址
 // 开发环境使用localhost，生产环境使用Railway地址
-const baseURL = process.env.VUE_APP_API_URL || 'http://localhost:8000'
+const baseURL = process.env.VUE_APP_API_URL || ''
 
 const request = axios.create({
   baseURL,

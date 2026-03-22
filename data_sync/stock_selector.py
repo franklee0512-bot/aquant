@@ -66,7 +66,7 @@ class StockSelector:
         SELECT COUNT(*) as count FROM signals
         WHERE code = :code
           AND signal_type = :signal_type
-          AND created_at >= CURRENT_TIMESTAMP - INTERVAL ':hours hours'
+          AND created_at >= CURRENT_TIMESTAMP - (:hours * INTERVAL '1 hour')
         """
         result = self.db.query_one(sql, {'code': code, 'signal_type': signal_type, 'hours': hours})
         return (result.get('count', 0) or 0) > 0
@@ -76,7 +76,7 @@ class StockSelector:
         sql = """
         SELECT * FROM stock_daily
         WHERE code = :code
-          AND trade_date >= CURRENT_DATE - INTERVAL ':days days'
+          AND trade_date >= CURRENT_DATE - (:days * INTERVAL '1 day')
         ORDER BY trade_date DESC
         """
         return self.db.query(sql, {'code': code, 'days': days})
@@ -86,7 +86,7 @@ class StockSelector:
         sql = """
         SELECT * FROM stock_finance
         WHERE code = :code
-          AND report_date >= CURRENT_DATE - INTERVAL ':years years'
+          AND report_date >= CURRENT_DATE - (:years * INTERVAL '1 year')
         ORDER BY report_date DESC
         """
         return self.db.query(sql, {'code': code, 'years': years})
